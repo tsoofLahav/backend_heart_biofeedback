@@ -5,6 +5,10 @@
   <p>Python · PyTorch · Flask · OpenCV · SciPy · Flutter</p>
 </div>
 
+![PPG waveform with detected heartbeat peaks and predicted future beat timing](graph.png)
+
+*Predicting ahead: red crosses mark detected beats; green dots mark predicted timings. Their horizontal separation shows timing error in this example.*
+
 ## The idea
 
 Developed during a practicum in **Prof. Amir Amedi’s Brain Lab at Reichman University**, Heart Biofeedback brought together two fields I studied at university: **machine learning and cognitive science**. The project explored how camera-based pulse sensing and predictive audio feedback could support interoception—the perception of internal bodily signals.
@@ -18,16 +22,67 @@ This is predictive biofeedback: the cues estimate future timing rather than guar
 ## From camera to feedback
 
 ```mermaid
-flowchart LR
-    A[Phone camera<br/>Short fingertip videos] --> B[Extract PPG<br/>Buffer and filter signal]
-    B --> C[Detect peaks<br/>Recent beat intervals]
-    C --> D[ML predictor<br/>Forecast upcoming beats]
-    D --> E[Align forecast window<br/>Generate audio cues]
-    E --> F[Phone playback<br/>Predictive biofeedback]
-    F -. Continuous recording loop .-> A
+flowchart TB
+    subgraph Phone[Mobile app · capture and playback]
+        Capture[Record fingertip video<br/>Repeating 3-second clips]
+        Playback[Play returned WAV<br/>Upcoming heartbeat cues]
+        Feedback[Loading or unreadable feedback]
+    end
+
+    subgraph Signal[Backend · build a readable pulse signal]
+        Upload[POST /process_video]
+        Extract[Resample to 72 frames at 24 Hz<br/>Circular ROI → mean intensity]
+        Buffer[Rolling buffer · latest 3 clips]
+        Ready{3 clips available?}
+        Join[Join clips and interpolate capture gaps<br/>240-sample analysis window]
+        Filter[0.8–3 Hz bandpass<br/>Normalize waveform]
+        Quality{Beat-shape correlation<br/>Readable signal?}
+        Peaks[Detect pulse peaks<br/>Adaptive peak spacing]
+        Upload --> Extract --> Buffer --> Ready
+        Ready -->|Yes| Join --> Filter --> Quality
+        Quality -->|Yes| Peaks
+    end
+
+    subgraph Forecast[Backend · predict beyond the observed signal]
+        Features[Last 8 intervals + relative peak times<br/>Pad short history with mean interval]
+        Model[Trained MLP · 16 → 128 → 64 → 8<br/>Predict 8 future peak times]
+        Align[Align to latest observed beat<br/>Extend with mean interval if needed]
+        Window[Select 10.5–14 s forecast window<br/>Shift to 0–3.5 s playback time]
+        Boundary[Correct the boundary between chunks<br/>Use previous audio gap]
+        Audio[Overlay beeps at forecast times<br/>Return 3.5-second WAV + BPM header]
+        Features --> Model --> Align --> Window --> Boundary --> Audio
+    end
+
+    subgraph Runtime[Runtime state and inspection]
+        State[In-memory buffers<br/>Mean interval · previous audio gap]
+        Saved[Saved predictions<br/>Returned by POST /end]
+        Inspect[Testing mode<br/>Signal + detected peaks + predictions as JSON]
+    end
+
+    Capture -->|Video upload| Upload
+    Ready -->|No · loading| Feedback
+    Quality -->|No · reset buffers| Feedback
+    Peaks --> Features
+    State -.-> Buffer
+    State -.-> Features
+    State -.-> Boundary
+    Boundary --> Saved
+    Window -. Testing mode .-> Inspect
+    Audio -->|Audio response| Playback
+    Playback -. Next capture cycle .-> Capture
+
+    classDef mobile fill:#173d38,stroke:#58dbc3,color:#effffb
+    classDef processing fill:#182c45,stroke:#779bc5,color:#f2f6fc
+    classDef learned fill:#303158,stroke:#b6a0ff,color:#ffffff
+    classDef timing fill:#413322,stroke:#e9b86b,color:#fff8ec
+    class Capture,Playback,Feedback mobile
+    class Upload,Extract,Buffer,Join,Filter,Peaks,Features processing
+    class Model learned
+    class Align,Window,Boundary,Audio timing
 ```
 
-The latest backend combines successive video segments into a signal window, checks readability, detects peaks, and predicts future peak times. It selects an upcoming portion of the forecast and returns a WAV track of scheduled beeps. This shifts the feedback target forward in time to accommodate the capture–processing–playback pipeline.
+
+The diagram follows the latest backend: signal preparation feeds the predictor, while buffering and audio-boundary logic maintain continuity between requests. The forecast window moves the feedback target beyond the observed signal to accommodate processing latency. Earlier classification and reconstruction experiments are detailed below; the current route does not include a database write.
 
 ## Three purpose-built models
 
@@ -52,12 +107,6 @@ The reconstruction network receives a ten-second signal with a two-second region
 The predictor receives **eight recent intervals paired with eight relative peak times**. Its fully connected layers map those 16 values to eight future peak times. Training uses past/future timing pairs with a Smooth L1 loss. The backend aligns the forecast to the latest detected beat and converts the selected future times into audio cues.
 
 ![Prediction model: observed beat timing through dense layers to future peak times](docs/diagrams/prediction.svg)
-
-## Prediction in practice
-
-The original signal plot shows **detected peaks as red crosses** and **predicted timings as green dots**, alongside the clean and filtered PPG waveforms. Their horizontal separation makes prediction timing error visible; the example illustrates the forecasting approach rather than an aggregate accuracy claim.
-
-![PPG waveform with detected heartbeat peaks and predicted future beat timing](graph.png)
 
 ## Explore the implementation
 
