@@ -5,10 +5,6 @@
   <p>Python · PyTorch · Flask · OpenCV · SciPy · Flutter</p>
 </div>
 
-![PPG waveform with detected heartbeat peaks and predicted future beat timing](graph.png)
-
-*Predicting ahead: red crosses mark detected beats; green dots mark predicted timings. Their horizontal separation shows timing error in this example.*
-
 ## The idea
 
 Developed during a practicum in **Prof. Amir Amedi’s Brain Lab at Reichman University**, Heart Biofeedback brought together two fields I studied at university: **machine learning and cognitive science**. The project explored how camera-based pulse sensing and predictive audio feedback could support interoception—the perception of internal bodily signals.
@@ -18,6 +14,11 @@ The central challenge was timing. By the time a fingertip video has been capture
 This is predictive biofeedback: the cues estimate future timing rather than guarantee synchronization with each actual heartbeat.
 
 [Watch the app demo →](https://www.youtube.com/shorts/ZayBn7RVBaY)
+
+
+![PPG waveform with detected heartbeat peaks and predicted future beat timing](graph.png)
+
+*Predicting ahead: red crosses mark detected beats; green dots mark predicted timings. Their horizontal separation shows timing error in this example.*
 
 ## From camera to feedback
 
